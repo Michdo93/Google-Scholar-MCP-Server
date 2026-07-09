@@ -68,7 +68,20 @@ async def get_author_info(author_name: str) -> Dict[str, Any]:
     """
     try:
         search_query = scholarly.search_author(author_name)
-        author = await asyncio.to_thread(next, search_query)
+
+        def _first_author(query):
+            # next() raising StopIteration inside asyncio.to_thread crashes
+            # the underlying Future (PEP 479). Catch it here and return None
+            # instead so the coroutine can handle "no results" cleanly.
+            try:
+                return next(query)
+            except StopIteration:
+                return None
+
+        author = await asyncio.to_thread(_first_author, search_query)
+        if author is None:
+            return {"error": f"No author found for: {author_name}"}
+
         filled_author = await asyncio.to_thread(scholarly.fill, author)
         
         # Extract relevant information
